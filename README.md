@@ -2,13 +2,13 @@
 
 > A production-grade distributed AI agent system — multi-agent goal decomposition, async Kafka messaging, semantic memory, LLM quality gating, and a real-time React dashboard.
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://github.com/NihalMishra17/agent-infra)
-[![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-2.x-231F20?style=flat-square&logo=apachekafka&logoColor=white)](https://github.com/NihalMishra17/agent-infra)
-[![Weaviate](https://img.shields.io/badge/Weaviate-1.27-FF6D00?style=flat-square&logo=weaviate&logoColor=white)](https://github.com/NihalMishra17/agent-infra)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi&logoColor=white)](https://github.com/NihalMishra17/agent-infra)
-[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://github.com/NihalMishra17/agent-infra)
-[![DSPy](https://img.shields.io/badge/DSPy-2.6-8A2BE2?style=flat-square)](https://github.com/NihalMishra17/agent-infra)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/NihalMishra17/agent-infra)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://github.com/Ansh-Shah-18/agent-infra)
+[![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-2.x-231F20?style=flat-square&logo=apachekafka&logoColor=white)](https://github.com/Ansh-Shah-18/agent-infra)
+[![Weaviate](https://img.shields.io/badge/Weaviate-1.27-FF6D00?style=flat-square&logo=weaviate&logoColor=white)](https://github.com/Ansh-Shah-18/agent-infra)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi&logoColor=white)](https://github.com/Ansh-Shah-18/agent-infra)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://github.com/Ansh-Shah-18/agent-infra)
+[![DSPy](https://img.shields.io/badge/DSPy-2.6-8A2BE2?style=flat-square)](https://github.com/Ansh-Shah-18/agent-infra)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/Ansh-Shah-18/agent-infra)
 
 ---
 
@@ -203,7 +203,7 @@ agent-infra/
 ### 1. Clone and install Python dependencies
 
 ```bash
-git clone https://github.com/NihalMishra17/agent-infra
+git clone https://github.com/Ansh-Shah-18/agent-infra
 cd agent-infra
 poetry install
 ```
