@@ -1,0 +1,30 @@
+[tool.poetry]
+package-mode = false
+name = "agent-infra"
+version = "0.1.0"
+description = "Distributed AI Agent Infrastructure — MCP + Kafka + Weaviate + DSPy + AKS"
+authors = ["Nihal"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+confluent-kafka = "^2.3.0"
+weaviate-client = "^4.5.0"
+dspy-ai = "^2.4.0"
+anthropic = "^0.25.0"
+pydantic = "^2.6.0"
+python-dotenv = "^1.0.0"
+tenacity = "^8.2.3"
+loguru = "^0.7.2"
+mcp = "^1.0.0"
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.30.0"}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.0"
+ruff = "^0.3.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

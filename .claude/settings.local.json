@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(poetry run:*)",
+      "Bash(1 poetry:*)",
+      "Bash(docker compose:*)",
+      "Read(//Users/nihal/Library/Caches/pypoetry/virtualenvs/**)",
+      "Read(//Users/nihal/Library/Caches/pypoetry/**)",
+      "Bash(source /Users/nihal/Library/Caches/pypoetry/virtualenvs/agent-infra-tkrHu4Kp-py3.12/bin/activate)",
+      "Bash(python -c \":*)",
+      "Bash(curl -s http://localhost:8080/v1/.well-known/ready 2)",
+      "Bash(1 docker:*)",
+      "Bash(python -c \"from cli import submit_and_watch; print\\(''cli import OK''\\)\")",
+      "Bash(pip install:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(python -c \"from agents.summarizer.agent import SummarizerAgent; print\\(''import OK''\\)\")"
+    ]
+  }
+}
