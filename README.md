@@ -177,6 +177,14 @@ agent-infra/
 │   ├── vite.config.js         # Dev server proxy → localhost:8000
 │   └── package.json
 │
+├── compliance/
+│   ├── auth.py                # JWT auth + role-based access control (viewer/operator/admin)
+│   ├── audit_log.py           # Append-only, hash-chained tamper-evident audit logger
+│   ├── pii_guardrail.py       # Regex/Luhn-based PII & secret detection and redaction
+│   └── issue_token.py         # CLI to mint a bearer token for the API
+│
+├── tests/                     # Unit tests for the compliance layer (33 tests, run with pytest)
+│
 ├── api.py                     # FastAPI server: health, goal submission, status, tasks, summary, memory search
 ├── cli.py                     # Terminal client: submit goal, stream task results, print final answer
 ├── docker-compose.yml         # Kafka + Zookeeper + Weaviate + t2v-transformers + Kafka UI
@@ -225,6 +233,8 @@ DSPY_MODEL=claude-haiku-4-5
 DSPY_MAX_TOKENS=2048
 PLANNER_CONSUMER_GROUP=planner-group
 EXECUTOR_CONSUMER_GROUP=executor-group
+AGENT_INFRA_JWT_SECRET=change-me-to-a-real-random-32-byte-secret
+AUDIT_LOG_PATH=audit_log.jsonl
 ```
 
 ### 3. Start infrastructure
@@ -315,16 +325,49 @@ python cli.py "Explain the key differences between transformer and diffusion mod
 
 ## API Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Returns `{ kafka: bool, weaviate: bool }` — used by the UI health dots |
-| `POST` | `/goals` | Body: `{ description }` — publishes to Kafka, returns `goal_id` |
-| `GET` | `/goals/{id}/status` | Pipeline stage progress, task count, approval count, progress % |
-| `GET` | `/goals/{id}/tasks` | Task cards reconstructed from Weaviate memory (description, status, score, feedback) |
-| `GET` | `/goals/{id}/summary` | Final synthesized answer once the Summarizer has completed |
-| `GET` | `/memory/search` | Query params: `q`, `agent_id` (optional), `limit` — semantic search over Weaviate |
+Every endpoint except `/health` requires a bearer token (`Authorization: Bearer <token>`) — see [Compliance Layer](#compliance-layer-auth-audit-logging-pii-guardrail) below for how to mint one.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/health` | none | Returns `{ kafka: bool, weaviate: bool }` — used by the UI health dots |
+| `POST` | `/goals` | `submit_task` | Body: `{ description }` — PII/secrets are redacted (or blocked, if high-risk) before publishing to Kafka, returns `goal_id` |
+| `GET` | `/goals/{id}/status` | `view_output` | Pipeline stage progress, task count, approval count, progress % |
+| `GET` | `/goals/{id}/tasks` | `view_output` | Task cards reconstructed from Weaviate memory (description, status, score, feedback) |
+| `GET` | `/goals/{id}/summary` | `view_output` | Final synthesized answer once the Summarizer has completed |
+| `GET` | `/memory/search` | `view_output` | Query params: `q`, `agent_id` (optional), `limit` — semantic search over Weaviate, results redacted before returning |
+| `GET` | `/audit-log` | `read_audit_log` | Returns every logged action plus `chain_intact` — whether the hash chain still verifies (admin-only) |
 
 Interactive docs available at **http://localhost:8000/docs** when the API server is running.
+
+---
+
+## Compliance Layer (auth, audit logging, PII guardrail)
+
+A self-contained `compliance/` package adds three things to the API above, without touching the agent orchestration logic itself:
+
+- **RBAC/authentication** (`compliance/auth.py`) — three roles (`viewer`, `operator`, `admin`), each mapped to an explicit set of permissions. Unknown roles/permissions are denied by default (fail closed).
+- **Tamper-evident audit logging** (`compliance/audit_log.py`) — every privileged call is appended to a SHA-256 hash-chained, append-only JSON-lines file (`audit_log.jsonl`). Editing or deleting a past entry breaks the chain, which `GET /audit-log` reports via `chain_intact`.
+- **PII/secret redaction guardrail** (`compliance/pii_guardrail.py`) — emails, phone numbers, SSNs, Luhn-valid credit card numbers, and AWS/API-style keys are redacted from goal descriptions and memory-search results before they're stored or returned; high-risk findings (SSNs, keys) block the request outright.
+
+### Get a token
+
+```bash
+python -m compliance.issue_token --subject user:ansh --role admin
+```
+
+Use it on any request:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:8000/goals/<id>/status
+```
+
+### Run the compliance-layer tests
+
+```bash
+pytest tests/ -v
+```
+
+33 unit tests covering token issuance/verification, RBAC allow/deny, audit-log chaining and tamper detection, and PII detection/redaction — see `VV_TEST_PLAN.md` for the full risk-classified requirements-to-test traceability matrix, and `SYSTEM_CARD.md` for a short, honest statement of what these controls do and don't cover.
 
 ---
 

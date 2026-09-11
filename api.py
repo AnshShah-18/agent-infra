@@ -11,11 +11,60 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from compliance.auth import (
+    AuthenticationError,
+    AuthorizationError,
+    Permission,
+    Principal,
+    Role,
+    TokenIssuer,
+    require_permission,
+)
+from compliance.audit_log import AuditLogger, Outcome
+from compliance.pii_guardrail import PiiGuardrail, RiskLevel
+
 load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Compliance layer: auth/RBAC, audit logging, PII guardrail
+# ---------------------------------------------------------------------------
+
+_JWT_SECRET = os.getenv("AGENT_INFRA_JWT_SECRET", "")
+if not _JWT_SECRET:
+    # Fails loud rather than silently signing tokens with a predictable
+    # default secret. Set AGENT_INFRA_JWT_SECRET in your .env (32+ chars).
+    raise RuntimeError(
+        "AGENT_INFRA_JWT_SECRET is not set. Add it to your .env (32+ characters)."
+    )
+
+_ISSUER = TokenIssuer(secret=_JWT_SECRET, issuer="agent-infra")
+AUDIT = AuditLogger(path=os.getenv("AUDIT_LOG_PATH", "audit_log.jsonl"))
+PII_GUARD = PiiGuardrail(block_at_or_above=RiskLevel.HIGH)
+
+
+def get_current_principal(authorization: str = Header(default="")) -> Principal:
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        return _ISSUER.verify(token)
+    except AuthenticationError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+
+
+def require(permission: Permission):
+    def _dependency(principal: Principal = Depends(get_current_principal)) -> Principal:
+        try:
+            require_permission(principal, permission)
+        except AuthorizationError as exc:
+            AUDIT.log_event(principal.subject, permission.value, "endpoint", Outcome.DENIED,
+                             {"reason": str(exc)})
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+        return principal
+    return _dependency
+
 
 # ---------------------------------------------------------------------------
 # Lazy singletons
@@ -201,17 +250,33 @@ def health() -> dict:
 
 
 @app.post("/goals", status_code=201)
-def submit_goal(body: GoalRequest) -> dict:
+def submit_goal(body: GoalRequest,
+                 principal: Principal = Depends(require(Permission.SUBMIT_TASK))) -> dict:
     from core.models import Goal
-    goal = Goal(description=body.description)
+
+    # Redact PII/secrets before the goal description is ever published to
+    # Kafka or stored in Weaviate memory. High-risk findings (SSNs, API
+    # keys, etc.) block the submission outright rather than merely redacting.
+    redacted_description, findings, blocked = PII_GUARD.check(body.description)
+    if blocked:
+        AUDIT.log_event(principal.subject, "submit_goal", "goal", Outcome.DENIED,
+                         {"reason": "high-risk PII in goal description",
+                          "finding_types": [f.pii_type.value for f in findings]})
+        raise HTTPException(status_code=422, detail="goal description contains high-risk PII and was blocked")
+
+    goal = Goal(description=redacted_description)
     pub = get_publisher()
     pub.publish("goals.submitted", goal, key=goal.goal_id)
     pub.flush()
+
+    AUDIT.log_event(principal.subject, "submit_goal", f"goal:{goal.goal_id}", Outcome.SUCCESS,
+                     {"pii_findings": [f.pii_type.value for f in findings]})
     return {"goal_id": goal.goal_id, "description": goal.description}
 
 
 @app.get("/goals/{goal_id}/status")
-def goal_status(goal_id: str) -> dict[str, Any]:
+def goal_status(goal_id: str,
+                 principal: Principal = Depends(require(Permission.VIEW_OUTPUT))) -> dict[str, Any]:
     mem = get_memory()
     counts = mem.count_by_goal(goal_id)
 
@@ -268,7 +333,8 @@ def goal_status(goal_id: str) -> dict[str, Any]:
 
 
 @app.get("/goals/{goal_id}/tasks")
-def goal_tasks(goal_id: str) -> list[dict]:
+def goal_tasks(goal_id: str,
+                principal: Principal = Depends(require(Permission.VIEW_OUTPUT))) -> list[dict]:
     mem = get_memory()
     executor_entries = mem.fetch_all_by_goal(goal_id, agent_id="executor")
     critic_entries = mem.fetch_all_by_goal(goal_id, agent_id="critic")
@@ -276,7 +342,8 @@ def goal_tasks(goal_id: str) -> list[dict]:
 
 
 @app.get("/goals/{goal_id}/summary")
-def goal_summary(goal_id: str) -> dict:
+def goal_summary(goal_id: str,
+                   principal: Principal = Depends(require(Permission.VIEW_OUTPUT))) -> dict:
     mem = get_memory()
     summary = mem.fetch_summary(goal_id)
     if summary is None:
@@ -285,8 +352,22 @@ def goal_summary(goal_id: str) -> dict:
 
 
 @app.get("/memory/search")
-def memory_search(q: str, agent_id: str | None = None, limit: int = 5) -> list[dict]:
+def memory_search(q: str, agent_id: str | None = None, limit: int = 5,
+                    principal: Principal = Depends(require(Permission.VIEW_OUTPUT))) -> list[dict]:
     if not q.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
     mem = get_memory()
-    return mem.search(query=q, agent_id=agent_id or None, limit=min(limit, 20))
+    results = mem.search(query=q, agent_id=agent_id or None, limit=min(limit, 20))
+    # Redact PII/secrets from stored content before it's ever returned to a client.
+    for r in results:
+        if isinstance(r.get("content"), str):
+            redacted_content, _, _ = PII_GUARD.check(r["content"])
+            r["content"] = redacted_content
+    return results
+
+
+@app.get("/audit-log")
+def read_audit_log(principal: Principal = Depends(require(Permission.READ_AUDIT_LOG))) -> dict:
+    AUDIT.log_event(principal.subject, "read_audit_log", "audit_log", Outcome.SUCCESS, {})
+    ok, reason = AUDIT.verify_chain()
+    return {"chain_intact": ok, "reason": reason, "entries": [e.__dict__ for e in AUDIT.read_all()]}

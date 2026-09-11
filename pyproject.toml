@@ -19,6 +19,7 @@ loguru = "^0.7.2"
 mcp = "^1.0.0"
 fastapi = "^0.115.0"
 uvicorn = {extras = ["standard"], version = "^0.30.0"}
+pyjwt = "^2.8.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

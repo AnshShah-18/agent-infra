@@ -3,3 +3,6 @@
 ui/node_modules/
 ui/node_modules/
 ui/package-lock.json
+__pycache__/
+*.pyc
+audit_log.jsonl
